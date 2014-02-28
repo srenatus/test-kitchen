@@ -71,9 +71,18 @@ module Kitchen
     end
 
     def upload_path!(local, remote, options = {}, &progress)
-      options = { :recursive => true }.merge(options)
+      cmd = [
+        'rsync', '--verbose', '--archive', '-z',
+        '-e', "ssh #{ssh_options.join(' ')}",
+        local, "#{username}@#{hostname}:#{remote}"
+      ]
+      logger.info "rsync: cmd = #{cmd}"
 
-      upload!(local, remote, options, &progress)
+      IO.popen(cmd) do |output|
+        output.each do |line|
+          logger.info "rsync: #{line}"
+        end
+      end
     end
 
     def shutdown
@@ -89,7 +98,7 @@ module Kitchen
       logger.info("Waiting for #{hostname}:#{port}...") until test_ssh
     end
 
-    def login_command
+    def ssh_options
       args  = %W{ -o UserKnownHostsFile=/dev/null }
       args += %W{ -o StrictHostKeyChecking=no }
       args += %W{ -o IdentitiesOnly=yes } if options[:keys]
@@ -97,7 +106,10 @@ module Kitchen
       args += %W{ -o ForwardAgent=#{options[:forward_agent] ? "yes" : "no"} } if options.key? :forward_agent
       Array(options[:keys]).each { |ssh_key| args += %W{ -i #{ssh_key}} }
       args += %W{ -p #{port}}
-      args += %W{ #{username}@#{hostname}}
+    end
+
+    def login_command
+      args = ssh_options + %W{ #{username}@#{hostname}}
 
       LoginCommand.new(["ssh", *args])
     end
